@@ -1,0 +1,308 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>PaywallCheck: can your users unlock paid features for free?</title>
+<meta name="description" content="PaywallCheck tests your Lovable, Supabase or Bolt app after every deploy: can someone unlock paid features without paying, or read another user's data. Every finding comes with a fix prompt.">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,400;12..96,500;12..96,700;12..96,800&family=JetBrains+Mono:wght@400;600&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --paper: #EEF1EC;
+    --sheet: #FAFBF8;
+    --ink: #1D2421;
+    --muted: #59635E;
+    --line: #CBD2CC;
+    --fail: #C2333D;
+    --pass: #2B7656;
+    --focus: #1F5FBF;
+    --radius-sheet: 6px;
+    --radius-control: 4px;
+  }
+  * { box-sizing: border-box; }
+  html { -webkit-text-size-adjust: 100%; }
+  body {
+    margin: 0;
+    background: var(--paper);
+    color: var(--ink);
+    font-family: "Bricolage Grotesque", system-ui, sans-serif;
+    font-size: 1.0625rem;
+    line-height: 1.55;
+  }
+  a { color: inherit; text-underline-offset: 3px; }
+  a:hover { color: var(--fail); }
+  :focus-visible { outline: 3px solid var(--focus); outline-offset: 2px; }
+  code, pre { font-family: "JetBrains Mono", ui-monospace, monospace; }
+
+  .wrap { max-width: 1120px; margin: 0 auto; padding: 0 20px; }
+
+  header.top {
+    display: flex; justify-content: space-between; align-items: center;
+    padding: 22px 0;
+  }
+  .brand { font-weight: 800; font-size: 1.15rem; letter-spacing: -0.01em; text-decoration: none; }
+  .brand span { color: var(--muted); font-weight: 500; }
+  .top-note { color: var(--muted); font-size: 0.95rem; }
+
+  /* Hero */
+  .hero {
+    display: grid; grid-template-columns: 1.05fr 1fr; gap: 56px;
+    align-items: center; padding: 40px 0 72px;
+  }
+  .hero h1 {
+    font-size: clamp(2.4rem, 5.2vw, 4.1rem);
+    line-height: 1.02; letter-spacing: -0.03em;
+    font-weight: 800; margin: 0 0 22px;
+    font-variation-settings: "opsz" 96;
+  }
+  .hero h1 code {
+    font-size: 0.82em; font-weight: 600; letter-spacing: -0.02em;
+    background: var(--sheet); border: 1px solid var(--line);
+    padding: 0 0.18em; border-radius: var(--radius-control);
+    white-space: nowrap;
+  }
+  .hero > *, .fix > *, .checks > * { min-width: 0; }
+  .lede { font-size: 1.2rem; color: var(--muted); max-width: 34em; margin: 0 0 30px; }
+  .lede strong { color: var(--ink); font-weight: 600; }
+
+  form.join { display: flex; gap: 10px; max-width: 480px; flex-wrap: wrap; }
+  form.join label { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); }
+  form.join input[type=email] {
+    flex: 1 1 240px; min-width: 0;
+    font: inherit; padding: 13px 14px;
+    background: var(--sheet); color: var(--ink);
+    border: 1.5px solid var(--ink); border-radius: var(--radius-control);
+  }
+  form.join button {
+    font: inherit; font-weight: 700; padding: 13px 20px; cursor: pointer;
+    background: var(--ink); color: var(--sheet);
+    border: 1.5px solid var(--ink); border-radius: var(--radius-control);
+  }
+  form.join button:hover { background: var(--fail); border-color: var(--fail); }
+  .form-note { margin: 12px 0 0; font-size: 0.95rem; color: var(--muted); max-width: 480px; }
+  .form-status { margin: 12px 0 0; font-weight: 600; min-height: 1.5em; }
+  .form-status:empty { display: none; }
+  .form-status.ok { color: var(--pass); }
+  .form-status.err { color: var(--fail); }
+
+  /* The test sheet */
+  .sheet {
+    position: relative;
+    background: var(--sheet); border: 1px solid var(--line);
+    border-radius: var(--radius-sheet);
+    padding: 22px 22px 26px;
+    box-shadow: 0 1px 0 var(--line), 0 18px 40px -28px rgba(29,36,33,.45);
+  }
+  .sheet-head { display: flex; justify-content: space-between; gap: 12px; font-size: 0.95rem; color: var(--muted); margin-bottom: 14px; }
+  .sheet-head b { color: var(--ink); font-weight: 600; }
+  .sheet h2 { font-size: 1.05rem; margin: 0 0 12px; font-weight: 700; }
+  .sheet pre {
+    margin: 0 0 12px; padding: 14px; overflow-x: auto;
+    background: var(--paper); border-radius: var(--radius-control);
+    font-size: 0.82rem; line-height: 1.6;
+  }
+  .sheet .req { color: var(--ink); }
+  .sheet .res { color: var(--fail); font-weight: 600; }
+  .sheet p { margin: 0; font-size: 0.98rem; color: var(--muted); }
+  .sheet p strong { color: var(--ink); }
+  .stamp {
+    position: absolute; top: 58px; right: 18px;
+    border: 3px solid var(--fail); color: var(--fail);
+    font-weight: 800; font-size: 1.5rem; letter-spacing: 0.06em;
+    padding: 2px 12px; border-radius: 4px;
+    transform: rotate(-8deg); opacity: .92;
+    animation: stamp .5s cubic-bezier(.2,.9,.3,1.3) .6s both;
+  }
+  @keyframes stamp {
+    from { transform: rotate(-8deg) scale(1.8); opacity: 0; }
+    to   { transform: rotate(-8deg) scale(1); opacity: .92; }
+  }
+  @media (prefers-reduced-motion: reduce) { .stamp { animation: none; } }
+
+  /* Sections */
+  section.block { padding: 64px 0; border-top: 1px solid var(--line); }
+  section.block h2 {
+    font-size: clamp(1.7rem, 3vw, 2.3rem); letter-spacing: -0.02em; line-height: 1.1;
+    margin: 0 0 28px; font-weight: 800; max-width: 22em;
+  }
+  .checks { display: grid; grid-template-columns: repeat(3, 1fr); gap: 36px; }
+  .checks h3 { font-size: 1.15rem; margin: 0 0 8px; font-weight: 700; }
+  .checks p { margin: 0; color: var(--muted); }
+  .checks code { font-size: 0.88em; }
+
+  .steps { list-style: none; margin: 0; padding: 0; display: grid; gap: 22px; max-width: 46em; counter-reset: step; }
+  .steps li { display: grid; grid-template-columns: 52px 1fr; gap: 8px; counter-increment: step; }
+  .steps li::before {
+    content: counter(step); font-weight: 800; font-size: 2rem; line-height: 1;
+    color: var(--line);
+  }
+  .steps b { display: block; font-size: 1.12rem; }
+  .steps span { color: var(--muted); }
+
+  .fix { display: grid; grid-template-columns: 1fr 1.2fr; gap: 48px; align-items: start; }
+  .fix p { color: var(--muted); margin: 0 0 14px; max-width: 30em; }
+  .fix pre {
+    margin: 0; padding: 20px; white-space: pre-wrap;
+    background: var(--ink); color: #E6ECE7; border-radius: var(--radius-sheet);
+    font-size: 0.86rem; line-height: 1.65;
+  }
+
+  .rules { max-width: 46em; }
+  .rules p { margin: 0 0 14px; color: var(--muted); }
+  .rules p strong { color: var(--ink); }
+
+  .cta-end { padding: 72px 0 40px; border-top: 1px solid var(--line); }
+  .cta-end h2 { font-size: clamp(1.7rem, 3vw, 2.3rem); letter-spacing: -0.02em; margin: 0 0 22px; font-weight: 800; }
+
+  footer { padding: 28px 0 40px; color: var(--muted); font-size: 0.92rem; }
+
+  @media (max-width: 860px) {
+    .hero { grid-template-columns: 1fr; gap: 40px; padding-top: 16px; }
+    .checks { grid-template-columns: 1fr; gap: 26px; }
+    .fix { grid-template-columns: 1fr; gap: 24px; }
+    .top-note { display: none; }
+  }
+  @media (max-width: 420px) {
+    .wrap { padding: 0 16px; }
+    .hero h1 { font-size: 2.1rem; }
+    .lede { font-size: 1.08rem; }
+    .stamp { font-size: 1.15rem; top: 54px; }
+    form.join button { width: 100%; }
+  }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header class="top">
+    <a class="brand" href="#">PaywallCheck <span>(working name)</span></a>
+    <span class="top-note">For apps built with Lovable, Supabase and Bolt</span>
+  </header>
+
+  <main>
+    <section class="hero">
+      <div>
+        <h1>Can your users set <code>is_paid</code> to true?</h1>
+        <p class="lede">PaywallCheck tests your app <strong>after every deploy</strong>: can someone unlock paid features without paying, or read another user's data. Every finding comes with a fix prompt you paste into your AI builder.</p>
+
+        <form class="join" action="https://formspree.io/f/mgakeodb" method="POST" data-form>
+          <label for="email-top">Email</label>
+          <input id="email-top" type="email" name="email" placeholder="you@yourapp.com" required autocomplete="email">
+          <input type="hidden" name="source" value="hero">
+          <button type="submit">Join the waitlist</button>
+        </form>
+        <p class="form-status" role="status" aria-live="polite"></p>
+        <p class="form-note">The first people on the list get a free check of their app at launch. We email you about the launch and nothing else.</p>
+      </div>
+
+      <div class="sheet" aria-label="Example of a failed check">
+        <div class="sheet-head"><span>Check: <b>paid flag</b></span><span>after deploy</span></div>
+        <h2>A free user upgrades themselves</h2>
+<pre><span class="req">PATCH /rest/v1/profiles?id=eq.&lt;own id&gt;
+apikey: &lt;public anon key&gt;
+
+{ "is_paid": true }</span>
+
+<span class="res">200 OK  → paid features unlocked</span></pre>
+        <p>The public key is in your site's code. If your database lets users edit their own row, <strong>they can edit the paid flag too</strong>.</p>
+        <div class="stamp" aria-hidden="true">FAIL</div>
+      </div>
+    </section>
+
+    <section class="block">
+      <h2>What it checks</h2>
+      <div class="checks">
+        <div>
+          <h3>Paid flags users can edit</h3>
+          <p>Fields like <code>is_paid</code>, <code>plan</code> or <code>credits</code> that a logged-in user can change from the browser.</p>
+        </div>
+        <div>
+          <h3>Rows other users can read</h3>
+          <p>Tables where row level security is on, but a policy still lets one user see another user's data.</p>
+        </div>
+        <div>
+          <h3>Payment events anyone can send</h3>
+          <p>Webhook endpoints that grant access without checking that the event really came from Stripe.</p>
+        </div>
+      </div>
+    </section>
+
+    <section class="block">
+      <h2>How it works</h2>
+      <ol class="steps">
+        <li><div><b>Prove the app is yours</b><span>Add a DNS record or a file to your site. We never test apps you can't prove you own.</span></div></li>
+        <li><div><b>Connect your deploys</b><span>The check runs after each deploy, so a change your AI made yesterday can't quietly reopen a hole.</span></div></li>
+        <li><div><b>Fix with one paste</b><span>You get a plain-language report and a prompt for Lovable, Cursor or Claude Code that fixes the issue.</span></div></li>
+      </ol>
+    </section>
+
+    <section class="block">
+      <div class="fix">
+        <div>
+          <h2>A fix prompt, not a security lecture</h2>
+          <p>You built the app by talking to an AI. The fix works the same way.</p>
+          <p>Example of what a finding gives you:</p>
+        </div>
+<pre>In my Supabase project, logged-in users can
+update the is_paid column on their own row in
+the profiles table. Move is_paid to a separate
+table that only the service role can write,
+and keep profiles editable for display fields.
+Set is_paid only in the Stripe webhook handler,
+after verifying the webhook signature.</pre>
+      </div>
+    </section>
+
+    <section class="block">
+      <div class="rules">
+        <h2>Why this matters now</h2>
+        <p>In February 2026 a showcased Lovable app was reported to expose data of 18,000 users through basic access mistakes (<a href="https://www.theregister.com/2026/02/27/lovable_app_vulnerabilities" rel="noopener">The Register</a>). Lovable's built-in check was reported to confirm that database security is <strong>turned on</strong>, not that it <strong>works</strong> (<a href="https://www.superblocks.com/blog/lovable-vulnerabilities" rel="noopener">Superblocks</a>).</p>
+        <p><strong>Our rules:</strong> we test only apps you've proven you own, and every test only reads. Nothing is changed or deleted.</p>
+      </div>
+    </section>
+
+    <section class="cta-end">
+      <h2>Get a free check when we launch</h2>
+      <form class="join" action="https://formspree.io/f/mgakeodb" method="POST" data-form>
+        <label for="email-bottom">Email</label>
+        <input id="email-bottom" type="email" name="email" placeholder="you@yourapp.com" required autocomplete="email">
+        <input type="hidden" name="source" value="bottom">
+        <button type="submit">Join the waitlist</button>
+      </form>
+      <p class="form-status" role="status" aria-live="polite"></p>
+    </section>
+  </main>
+
+  <footer>PaywallCheck is in development. We'll email you once, at launch. Unsubscribe in one click.</footer>
+</div>
+
+<script>
+  document.querySelectorAll('[data-form]').forEach(function (form) {
+    form.addEventListener('submit', async function (e) {
+      e.preventDefault();
+      var status = form.nextElementSibling;
+      var btn = form.querySelector('button');
+      if (form.action.indexOf('__FORM_NOT_SET__') !== -1) {
+        status.textContent = 'The form is not connected yet.';
+        status.className = 'form-status err';
+        return;
+      }
+      btn.disabled = true;
+      try {
+        var res = await fetch(form.action, { method: 'POST', body: new FormData(form), headers: { 'Accept': 'application/json' } });
+        if (!res.ok) throw new Error();
+        form.reset();
+        status.textContent = "You're on the list. We'll email you at launch.";
+        status.className = 'form-status ok';
+      } catch (err) {
+        status.textContent = "Couldn't save your email. Check your connection and try again.";
+        status.className = 'form-status err';
+      } finally {
+        btn.disabled = false;
+      }
+    });
+  });
+</script>
+</body>
+</html>
